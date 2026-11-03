@@ -1,0 +1,7 @@
+{
+  "appId": "com.nextlevel.fitness",
+  "appName": "Next Level",
+  "webDir": "www",
+  "backgroundColor": "#0B0F17",
+  "ios": { "contentInset": "always" }
+}

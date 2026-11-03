@@ -1,0 +1,14 @@
+{
+  "name": "next-level-fitness",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Next Level Fitness - iOS wrapper (Capacitor)",
+  "scripts": {
+    "build:web": "node scripts/build-web.js"
+  },
+  "dependencies": {
+    "@capacitor/cli": "6.2.1",
+    "@capacitor/core": "6.2.1",
+    "@capacitor/ios": "6.2.1"
+  }
+}

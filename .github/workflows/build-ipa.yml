@@ -1,0 +1,53 @@
+name: Build iOS IPA (unsigned)
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths: ['**.js', '**.html', '**.css', 'package.json', 'capacitor.config.json', '.github/workflows/build-ipa.yml']
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build web bundle
+        run: npm run build:web
+
+      - name: Add iOS platform
+        run: |
+          npx cap add ios
+          npx cap sync ios
+
+      - name: Set app icon
+        run: |
+          ICON_DIR=ios/App/App/Assets.xcassets/AppIcon.appiconset
+          sips -z 1024 1024 icon-512.png --out "$ICON_DIR/AppIcon-512@2x.png" || true
+
+      - name: Archive (no code signing)
+        working-directory: ios/App
+        run: |
+          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
+            -sdk iphoneos -destination 'generic/platform=iOS' \
+            -archivePath "$PWD/build/App.xcarchive" archive \
+            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+
+      - name: Package IPA
+        working-directory: ios/App/build
+        run: |
+          mkdir Payload
+          cp -R App.xcarchive/Products/Applications/App.app Payload/
+          zip -qr NextLevelFitness.ipa Payload
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: NextLevelFitness-ipa
+          path: ios/App/build/NextLevelFitness.ipa
