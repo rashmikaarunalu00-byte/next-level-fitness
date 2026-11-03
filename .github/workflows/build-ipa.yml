@@ -1,53 +1,65 @@
-name: Build iOS IPA (unsigned)
+name: Build iOS IPA
 
 on:
-  workflow_dispatch:
   push:
-    branches: [main]
-    paths: ['**.js', '**.html', '**.css', 'package.json', 'capacitor.config.json', '.github/workflows/build-ipa.yml']
+    branches:
+      - main
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: macos-14
-    steps:
-      - uses: actions/checkout@v4
+    runs-on: macos-latest
 
-      - uses: actions/setup-node@v4
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
         with:
           node-version: 20
 
-      - name: Install dependencies
-        run: npm install
+      - name: Copy web files into www/
+        run: |
+          mkdir -p www
+          rsync -a \
+            --exclude '.git' --exclude '.github' --exclude 'node_modules' \
+            --exclude 'ios' --exclude 'www' --exclude 'supabase' \
+            --exclude '*.md' --exclude 'package.json' --exclude 'package-lock.json' \
+            --exclude 'capacitor.config.json' --exclude '.nojekyll' \
+            ./ www/
+          ls www
 
-      - name: Build web bundle
-        run: npm run build:web
+      - name: Install Dependencies
+        run: |
+          [ -f package.json ] || npm init -y
+          npm install @capacitor/core@7 @capacitor/cli@7 @capacitor/ios@7
 
       - name: Add iOS platform
         run: |
-          npx cap add ios
-          npx cap sync ios
+          if [ ! -d ios ]; then npx cap add ios; fi
 
-      - name: Set app icon
+      - name: Use app icon
         run: |
-          ICON_DIR=ios/App/App/Assets.xcassets/AppIcon.appiconset
-          sips -z 1024 1024 icon-512.png --out "$ICON_DIR/AppIcon-512@2x.png" || true
+          ICON_DIR=$(find ios -type d -name 'AppIcon.appiconset' | head -n 1)
+          if [ -n "$ICON_DIR" ] && [ -f www/icon-512.png ]; then
+            sips -z 1024 1024 www/icon-512.png --out "$ICON_DIR/AppIcon-512@2x.png" || true
+          fi
 
-      - name: Archive (no code signing)
-        working-directory: ios/App
+      - name: Sync Capacitor iOS
+        run: npx cap sync ios
+
+      - name: Build Xcode & Create Unsigned IPA
         run: |
-          xcodebuild -workspace App.xcworkspace -scheme App -configuration Release \
-            -sdk iphoneos -destination 'generic/platform=iOS' \
-            -archivePath "$PWD/build/App.xcarchive" archive \
-            CODE_SIGNING_ALLOWED=NO CODE_SIGNING_REQUIRED=NO CODE_SIGN_IDENTITY=""
+          cd ios/App
+          xcodebuild -workspace App.xcworkspace -scheme App -sdk iphoneos -configuration Release clean archive -archivePath build/App.xcarchive CODE_SIGN_IDENTITY="" CODE_SIGNING_REQUIRED=NO CODE_SIGNING_ALLOWED=NO
+          mkdir -p build/Payload
+          cp -r build/App.xcarchive/Products/Applications/App.app build/Payload/
+          cd build
+          zip -r App.ipa Payload
 
-      - name: Package IPA
-        working-directory: ios/App/build
-        run: |
-          mkdir Payload
-          cp -R App.xcarchive/Products/Applications/App.app Payload/
-          zip -qr NextLevelFitness.ipa Payload
-
-      - uses: actions/upload-artifact@v4
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
         with:
-          name: NextLevelFitness-ipa
-          path: ios/App/build/NextLevelFitness.ipa
+          name: next-level-fitness-ipa
+          path: ios/App/build/App.ipa
